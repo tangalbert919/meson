@@ -1347,6 +1347,7 @@ class XCodeBackend(backends.Backend):
             bt_dict.add_item('buildSettings', settings_dict)
             settings_dict.add_item('ARCHS', '"$(NATIVE_ARCH_ACTUAL)"')
             settings_dict.add_item('ONLY_ACTIVE_ARCH', 'YES')
+            settings_dict.add_item('SWIFT_INCLUDE_PATHS', '"%s/**"' % self.environment.get_build_dir())
             settings_dict.add_item('SWIFT_VERSION', '5.0')
             settings_dict.add_item('SDKROOT', '"macosx"')
             settings_dict.add_item('SYMROOT', '"%s/build"' % self.environment.get_build_dir())
