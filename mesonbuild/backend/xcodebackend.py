@@ -1470,6 +1470,7 @@ class XCodeBackend(backends.Backend):
             settings_dict.add_item('BUILD_DIR', f'"{self.environment.get_build_dir()}"')
             settings_dict.add_item('BUILD_ROOT', '"$(BUILD_DIR)"')
             settings_dict.add_item('ONLY_ACTIVE_ARCH', 'YES')
+            settings_dict.add_item('SWIFT_INCLUDE_PATHS', '"%s/**"' % self.environment.get_build_dir())
             settings_dict.add_item('SWIFT_VERSION', '5.0')
             settings_dict.add_item('SDKROOT', '"macosx"')
             settings_dict.add_item('OBJROOT', '"$(BUILD_DIR)/build"')
