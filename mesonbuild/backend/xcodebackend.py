@@ -13,7 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
-import uuid, os, operator
+import uuid, os, operator, platform
 import typing as T
 
 from . import backends
@@ -247,7 +247,7 @@ class XCodeBackend(backends.Backend):
         project = self.build.project_name
         buildtype = self.buildtype
         tname = target.get_id()
-        arch = 'x86_64'
+        arch = platform.machine().lower()
         if isinstance(source, mesonlib.File):
             source = source.fname
         stem = os.path.splitext(os.path.basename(source))[0]
