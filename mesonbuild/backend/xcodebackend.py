@@ -18,7 +18,6 @@ import typing as T
 
 from . import backends
 from .. import build
-from .. import dependencies
 from .. import mesonlib
 from .. import mlog
 from ..mesonlib import MesonBugException, MesonException, OptionKey
