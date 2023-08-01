@@ -13,7 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
-import uuid, os, operator, platform
+import uuid, os, operator
 import typing as T
 
 from . import backends
@@ -205,6 +205,9 @@ class XCodeBackend(backends.Backend):
         self.regen_dependency_id = self.gen_id()
         self.top_level_dict = PbxDict()
         self.generator_outputs = {}
+        self.arch = self.interpreter.builtin['target_machine'].cpu_method(None, None)
+        if self.arch == 'aarch64':
+            self.arch = 'arm64'
         # In Xcode files are not accessed via their file names, but rather every one of them
         # gets an unique id. More precisely they get one unique id per target they are used
         # in. If you generate only one id per file and use them, compilation will work but the
@@ -248,11 +251,10 @@ class XCodeBackend(backends.Backend):
         project = self.build.project_name
         buildtype = self.buildtype
         tname = target.get_id()
-        arch = platform.machine().lower()
         if isinstance(source, mesonlib.File):
             source = source.fname
         stem = os.path.splitext(os.path.basename(source))[0]
-        obj_path = f'{project}.build/{buildtype}/{tname}.build/Objects-normal/{arch}/{stem}.o'
+        obj_path = f'{project}.build/{buildtype}/{tname}.build/Objects-normal/{self.arch}/{stem}.o'
         return obj_path
 
     def generate(self, capture: bool = False, vslite_ctx: dict = None) -> T.Optional[dict]:
@@ -1395,7 +1397,7 @@ class XCodeBackend(backends.Backend):
             bt_dict.add_item('isa', 'XCBuildConfiguration')
             settings_dict = PbxDict()
             bt_dict.add_item('buildSettings', settings_dict)
-            settings_dict.add_item('ARCHS', '"$(NATIVE_ARCH_ACTUAL)"')
+            settings_dict.add_item('ARCHS', '"%s"' % self.arch)
             settings_dict.add_item('ONLY_ACTIVE_ARCH', 'YES')
             settings_dict.add_item('SWIFT_INCLUDE_PATHS', '"%s/**"' % self.environment.get_build_dir())
             settings_dict.add_item('SWIFT_VERSION', '5.0')
@@ -1440,7 +1442,7 @@ class XCodeBackend(backends.Backend):
             bt_dict.add_item('isa', 'XCBuildConfiguration')
             settings_dict = PbxDict()
             bt_dict.add_item('buildSettings', settings_dict)
-            settings_dict.add_item('ARCHS', '"$(NATIVE_ARCH_ACTUAL)"')
+            settings_dict.add_item('ARCHS', '"%s"' % self.arch)
             settings_dict.add_item('ONLY_ACTIVE_ARCH', 'YES')
             settings_dict.add_item('SDKROOT', '"macosx"')
             settings_dict.add_item('SYMROOT', '"%s/build"' % self.environment.get_build_dir())
