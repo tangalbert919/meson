@@ -589,9 +589,15 @@ class XCodeBackend(backends.Backend):
                 elif isinstance(d, build.BuildTarget):
                     dependencies.append(self.pbx_dep_map[d.get_id()])
             for s in t.sources:
-                if not isinstance(s, build.GeneratedList):
+                if isinstance(s, build.GeneratedList):
+                    build_phases.append(self.shell_targets[(tname, generator_id)])
+                elif isinstance(s, build.ExtractedObjects):
+                    source_target_id = self.pbx_dep_map[s.target.get_id()]
+                    if source_target_id not in dependencies:
+                        dependencies.append(source_target_id)
                     continue
-                build_phases.append(self.shell_targets[(tname, generator_id)])
+                else:
+                    continue
                 for d in s.depends:
                     dependencies.append(self.pbx_custom_dep_map[d.get_id()])
                 generator_id += 1
