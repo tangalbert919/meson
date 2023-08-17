@@ -257,6 +257,13 @@ class XCodeBackend(backends.Backend):
         obj_path = f'{project}.build/{buildtype}/{tname}.build/Objects-normal/{self.arch}/{stem}.o'
         return obj_path
 
+    def determine_swift_dep_dirs(self, target):
+        result: T.List[str] = []
+        for l in target.link_targets:
+            # Xcode does not recognize our private directories, so we have to use its build directories instead.
+            result.append(os.path.join(self.environment.get_build_dir(), self.get_target_dir(l)))
+        return result
+
     def generate(self, capture: bool = False, vslite_ctx: dict = None) -> T.Optional[dict]:
         # Check for (currently) unexpected capture arg use cases -
         if capture:
@@ -1416,7 +1423,6 @@ class XCodeBackend(backends.Backend):
             bt_dict.add_item('buildSettings', settings_dict)
             settings_dict.add_item('ARCHS', '"%s"' % self.arch)
             settings_dict.add_item('ONLY_ACTIVE_ARCH', 'YES')
-            settings_dict.add_item('SWIFT_INCLUDE_PATHS', '"%s/**"' % self.environment.get_build_dir())
             settings_dict.add_item('SWIFT_VERSION', '5.0')
             settings_dict.add_item('SDKROOT', '"macosx"')
             settings_dict.add_item('SYMROOT', '"%s/build"' % self.environment.get_build_dir())
