@@ -239,7 +239,8 @@ class XCodeBackend(backends.Backend):
         if isinstance(source, mesonlib.File):
             source = source.fname
         stem = os.path.splitext(os.path.basename(source))[0]
-        obj_path = f'{project}.build/{buildtype}/{tname}.build/Objects-normal/{self.arch}/{stem}.o'
+        # Append "build" before the actual object path to match OBJROOT
+        obj_path = f'build/{project}.build/{buildtype}/{tname}.build/Objects-normal/{self.arch}/{stem}.o'
         return obj_path
 
     def determine_swift_dep_dirs(self, target: build.BuildTarget) -> T.List[str]:
@@ -1400,10 +1401,12 @@ class XCodeBackend(backends.Backend):
             settings_dict = PbxDict()
             bt_dict.add_item('buildSettings', settings_dict)
             settings_dict.add_item('ARCHS', '"%s"' % self.arch)
+            settings_dict.add_item('BUILD_DIR', '"%s"' % self.environment.get_build_dir())
+            settings_dict.add_item('BUILD_ROOT', '"$(BUILD_DIR)"')
             settings_dict.add_item('ONLY_ACTIVE_ARCH', 'YES')
             settings_dict.add_item('SWIFT_VERSION', '5.0')
             settings_dict.add_item('SDKROOT', '"macosx"')
-            settings_dict.add_item('SYMROOT', '"%s/build"' % self.environment.get_build_dir())
+            settings_dict.add_item('OBJROOT', '"$(BUILD_DIR)/build"')
             bt_dict.add_item('name', f'"{buildtype}"')
 
         # Then the all target.
@@ -1413,7 +1416,6 @@ class XCodeBackend(backends.Backend):
             bt_dict.add_item('isa', 'XCBuildConfiguration')
             settings_dict = PbxDict()
             bt_dict.add_item('buildSettings', settings_dict)
-            settings_dict.add_item('SYMROOT', '"%s"' % self.environment.get_build_dir())
             warn_array = PbxArray()
             warn_array.add_item('"$(inherited)"')
             settings_dict.add_item('WARNING_CFLAGS', warn_array)
@@ -1427,7 +1429,6 @@ class XCodeBackend(backends.Backend):
             bt_dict.add_item('isa', 'XCBuildConfiguration')
             settings_dict = PbxDict()
             bt_dict.add_item('buildSettings', settings_dict)
-            settings_dict.add_item('SYMROOT', '"%s"' % self.environment.get_build_dir())
             warn_array = PbxArray()
             settings_dict.add_item('WARNING_CFLAGS', warn_array)
             warn_array.add_item('"$(inherited)"')
@@ -1446,7 +1447,6 @@ class XCodeBackend(backends.Backend):
             settings_dict.add_item('ARCHS', '"%s"' % self.arch)
             settings_dict.add_item('ONLY_ACTIVE_ARCH', 'YES')
             settings_dict.add_item('SDKROOT', '"macosx"')
-            settings_dict.add_item('SYMROOT', '"%s/build"' % self.environment.get_build_dir())
             bt_dict.add_item('name', f'"{buildtype}"')
 
     def determine_internal_dep_link_args(self, target, buildtype):
@@ -1674,7 +1674,8 @@ class XCodeBackend(backends.Backend):
             settings_dict.add_item('SECTORDER_FLAGS', '""')
             if is_swift and bridging_header:
                 settings_dict.add_item('SWIFT_OBJC_BRIDGING_HEADER', f'"{bridging_header}"')
-            settings_dict.add_item('SYMROOT', f'"{symroot}"')
+            settings_dict.add_item('BUILD_DIR', f'"{symroot}"')
+            settings_dict.add_item('OBJROOT', f'"{symroot}/build"')
             sysheader_arr = PbxArray()
             # XCode will change every -I flag that points inside these directories
             # to an -isystem. Thus set nothing in it since we control our own
