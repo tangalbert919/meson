@@ -1249,10 +1249,10 @@ class XCodeBackend(backends.Backend):
             # Fix object paths, as they point to non-existent private directories.
             for i, _ in enumerate(srcs):
                 if srcs[i].endswith(".o"):
-                    srcs[i] = '/'.join(srcs[i].split('/')[2:])
+                    srcs[i] = os.path.join('build', '/'.join(srcs[i].split('/')[2:]))
             for i, _ in enumerate(cmd):
                 if cmd[i].endswith(".o"):
-                    cmd[i] = '/'.join(cmd[i].split('/')[2:])
+                    cmd[i] = os.path.join('build', '/'.join(cmd[i].split('/')[2:]))
             fixed_cmd, _ = self.as_meson_exe_cmdline(cmd[0],
                                                      cmd[1:],
                                                      capture=ofilenames[0] if t.capture else None,
@@ -1553,8 +1553,8 @@ class XCodeBackend(backends.Backend):
                 if isinstance(o, build.ExtractedObjects):
                     added_objs = set()
                     for objname_rel in self.determine_ext_objs(o):
-                        # Drop first two levels in relative path, extracted objects do not exist there.
-                        objname_abs = os.path.join(self.environment.get_build_dir(), o.target.subdir, '/'.join(objname_rel.split('/')[2:]))
+                        # Correct object paths so they match OBJROOT
+                        objname_abs = os.path.join(self.environment.get_build_dir(), o.target.subdir, 'build', '/'.join(objname_rel.split('/')[2:]))
                         if objname_abs not in added_objs:
                             added_objs.add(objname_abs)
                             ldargs += [r'\"' + objname_abs + r'\"']
