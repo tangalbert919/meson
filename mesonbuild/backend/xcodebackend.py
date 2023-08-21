@@ -255,6 +255,13 @@ class XCodeBackend(backends.Backend):
             result.append(os.path.join(self.environment.get_build_dir(), self.get_target_dir(l)))
         return result
 
+    def get_run_targets(self):
+        run_targets = {}
+        for name, t in self.build.targets.items():
+            if isinstance(t, build.RunTarget):
+                run_targets[name] = t
+        return run_targets
+
     def generate(self, capture: bool = False, vslite_ctx: T.Optional[T.Dict] = None) -> None:
         # Check for (currently) unexpected capture arg use cases -
         if capture:
@@ -265,6 +272,7 @@ class XCodeBackend(backends.Backend):
         # Cache the result as the method rebuilds the array every time it is called.
         self.build_targets = self.build.get_build_targets()
         self.custom_targets = self.build.get_custom_targets()
+        self.run_targets = self.get_run_targets()
         self.generate_filemap()
         self.generate_buildstylemap()
         self.generate_build_phase_map()
@@ -278,6 +286,7 @@ class XCodeBackend(backends.Backend):
         self.generate_custom_target_map()
         self.generate_native_target_build_rules_map()
         self.generate_generator_target_map()
+        self.generate_run_target_map()
         self.generate_source_phase_map()
         self.generate_target_dependency_map()
         self.generate_pbxdep_map()
@@ -388,6 +397,9 @@ class XCodeBackend(backends.Backend):
         for t in self.custom_targets:
             bconfs = {self.buildtype: self.gen_id()}
             self.buildconfmap[t] = bconfs
+        for t in self.run_targets:
+            bconfs = {self.buildtype: self.gen_id()}
+            self.buildconfmap[t] = bconfs
 
     def generate_project_configurations_map(self) -> None:
         self.project_configurations = {self.buildtype: self.gen_id()}
@@ -403,6 +415,8 @@ class XCodeBackend(backends.Backend):
         for t in self.build_targets:
             self.buildconflistmap[t] = self.gen_id()
         for t in self.custom_targets:
+            self.buildconflistmap[t] = self.gen_id()
+        for t in self.run_targets:
             self.buildconflistmap[t] = self.gen_id()
 
     def generate_native_target_map(self) -> None:
@@ -432,6 +446,11 @@ class XCodeBackend(backends.Backend):
             for o in ofilenames:
                 self.custom_target_output_buildfile[o] = self.gen_id()
                 self.custom_target_output_fileref[o] = self.gen_id()
+
+    def generate_run_target_map(self) -> None:
+        for tname, t in self.run_targets.items():
+            if not isinstance(t, build.AliasTarget):
+                self.shell_targets[tname] = self.gen_id()
 
     def generate_generator_target_map(self) -> None:
         # Generator objects do not have natural unique ids
@@ -503,10 +522,13 @@ class XCodeBackend(backends.Backend):
     def generate_pbxdep_map(self) -> None:
         self.pbx_dep_map = {}
         self.pbx_custom_dep_map = {}
+        self.pbx_run_map_dep = {}
         for t in self.build_targets:
             self.pbx_dep_map[t] = self.gen_id()
         for t in self.custom_targets:
             self.pbx_custom_dep_map[t] = self.gen_id()
+        for t in self.run_targets:
+            self.pbx_run_map_dep[t] = self.gen_id()
 
     def generate_containerproxy_map(self) -> None:
         self.containerproxy_map = {}
@@ -570,6 +592,7 @@ class XCodeBackend(backends.Backend):
 
     def generate_pbx_aggregate_target(self, objects_dict: PbxDict) -> None:
         self.custom_aggregate_targets = {}
+        self.run_aggregate_targets = {}
         self.build_all_tdep_id = self.gen_id()
         target_dependencies = []
         custom_target_dependencies = []
@@ -615,6 +638,23 @@ class XCodeBackend(backends.Backend):
                     if source_target_id not in dependencies:
                         dependencies.append(source_target_id)
             build_phases.append(self.shell_targets[tname])
+            aggregated_targets.append((ct_id, tname, self.buildconflistmap[tname], build_phases, dependencies))
+
+        for tname, t in self.run_targets.items():
+            ct_id = self.gen_id()
+            self.run_aggregate_targets[tname] = ct_id
+            dependencies = [self.regen_dependency_id]
+            build_phases = []
+            for d in t.dependencies:
+                if isinstance(d, build.CustomTarget):
+                    dependencies.append(self.pbx_custom_dep_map[d.get_id()])
+                elif isinstance(d, build.BuildTarget):
+                    dependencies.append(self.pbx_dep_map[d.get_id()])
+                # Only alias targets can have run targets as dependencies
+                elif isinstance(d, build.RunTarget) and isinstance(t, build.AliasTarget):
+                    dependencies.append(self.pbx_run_map_dep[d.get_id()])
+            if not isinstance(t, build.AliasTarget):
+                build_phases.append(self.shell_targets[tname])
             aggregated_targets.append((ct_id, tname, self.buildconflistmap[tname], build_phases, dependencies))
 
         # Sort objects by ID before writing
@@ -1255,12 +1295,15 @@ class XCodeBackend(backends.Backend):
             targets_arr.add_item(self.native_targets[t], t)
         for t in self.custom_targets:
             targets_arr.add_item(self.custom_aggregate_targets[t], t)
+        for t in self.run_targets:
+            targets_arr.add_item(self.run_aggregate_targets[t], t)
 
     def generate_pbx_shell_build_phase(self, objects_dict: PbxDict) -> None:
         self.generate_test_shell_build_phase(objects_dict)
         self.generate_regen_shell_build_phase(objects_dict)
         self.generate_custom_target_shell_build_phases(objects_dict)
         self.generate_generator_target_shell_build_phases(objects_dict)
+        self.generate_run_target_shell_build_phase(objects_dict)
 
     def generate_test_shell_build_phase(self, objects_dict: PbxDict) -> None:
         shell_dict = PbxDict()
@@ -1331,7 +1374,35 @@ class XCodeBackend(backends.Backend):
             custom_dict.add_item('shellScript', f'"cd \'{workdir}\'; {cmdstr}"')
             custom_dict.add_item('showEnvVarsInLog', 0)
 
-    def generate_generator_target_shell_build_phases(self, objects_dict: PbxDict) -> None:
+    def generate_run_target_shell_build_phase(self, objects_dict: PbxDict) -> None:
+        for tname, t in self.run_targets.items():
+            if isinstance(t, build.AliasTarget):
+                continue
+            _, _, cmd = self.eval_custom_target_command(t)
+            wrapper_cmd, _ = self.as_meson_exe_cmdline(t.command[0],
+                                                       cmd[1:],
+                                                       env=t.env,
+                                                       verbose=True)
+            run_dict = PbxDict()
+            objects_dict.add_item(self.shell_targets[tname], run_dict, f'/* Run target {tname} */')
+            run_dict.add_item('isa', 'PBXShellScriptBuildPhase')
+            run_dict.add_item('buildActionMask', 2147483647)
+            run_dict.add_item('files', PbxArray())
+            run_dict.add_item('inputPaths', PbxArray())
+            outarray = PbxArray()
+            run_dict.add_item('name', '"Run {}."'.format(tname))
+            run_dict.add_item('outputPaths', PbxArray())
+            run_dict.add_item('runOnlyForDeploymentPostprocessing', 0)
+            run_dict.add_item('shellPath', '/bin/sh')
+            workdir = self.environment.get_build_dir()
+            quoted_cmd = []
+            for c in wrapper_cmd:
+                quoted_cmd.append(c.replace('"', chr(92) + '"'))
+            cmdstr = ' '.join([f"\\'{x}\\'" for x in quoted_cmd])
+            run_dict.add_item('shellScript', f'"cd \'{workdir}\'; {cmdstr}"')
+            run_dict.add_item('showEnvVarsInLog', 0)
+
+    def generate_generator_target_shell_build_phases(self, objects_dict):
         for tname, t in self.build_targets.items():
             generator_id = 0
             for genlist in t.generated:
@@ -1455,6 +1526,10 @@ class XCodeBackend(backends.Backend):
             idval = self.pbx_custom_dep_map[t]
             targets.append((idval, self.custom_aggregate_targets[t], t, None)) # self.containerproxy_map[t]))
 
+        for t in self.run_targets:
+            idval = self.pbx_run_map_dep[t]
+            targets.append((idval, self.run_aggregate_targets[t], t, None))
+
         # Sort object by ID
         sorted_targets = sorted(targets, key=operator.itemgetter(0))
         for t in sorted_targets:
@@ -1519,6 +1594,17 @@ class XCodeBackend(backends.Backend):
             settings_dict = PbxDict()
             bt_dict.add_item('buildSettings', settings_dict)
             settings_dict.add_item('ARCHS', f'"{self.arch}"')
+            settings_dict.add_item('ONLY_ACTIVE_ARCH', 'YES')
+            settings_dict.add_item('SDKROOT', '"macosx"')
+            bt_dict.add_item('name', f'"{buildtype}"')
+
+        for target_name, target in self.run_targets.items():
+            bt_dict = PbxDict()
+            objects_dict.add_item(self.buildconfmap[target_name][buildtype], bt_dict, buildtype)
+            bt_dict.add_item('isa', 'XCBuildConfiguration')
+            settings_dict = PbxDict()
+            bt_dict.add_item('buildSettings', settings_dict)
+            settings_dict.add_item('ARCHS', '"%s"' % self.arch)
             settings_dict.add_item('ONLY_ACTIVE_ARCH', 'YES')
             settings_dict.add_item('SDKROOT', '"macosx"')
             bt_dict.add_item('name', f'"{buildtype}"')
@@ -1835,6 +1921,18 @@ class XCodeBackend(backends.Backend):
             t_dict.add_item('defaultConfigurationName', self.buildtype)
 
         for target_name in self.custom_targets:
+            t_dict = PbxDict()
+            listid = self.buildconflistmap[target_name]
+            objects_dict.add_item(listid, t_dict, f'Build configuration list for PBXAggregateTarget "{target_name}"')
+            t_dict.add_item('isa', 'XCConfigurationList')
+            conf_arr = PbxArray()
+            t_dict.add_item('buildConfigurations', conf_arr)
+            idval = self.buildconfmap[target_name][self.buildtype]
+            conf_arr.add_item(idval, self.buildtype)
+            t_dict.add_item('defaultConfigurationIsVisible', 0)
+            t_dict.add_item('defaultConfigurationName', self.buildtype)
+
+        for target_name in self.run_targets:
             t_dict = PbxDict()
             listid = self.buildconflistmap[target_name]
             objects_dict.add_item(listid, t_dict, f'Build configuration list for PBXAggregateTarget "{target_name}"')
