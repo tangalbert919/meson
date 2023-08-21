@@ -275,7 +275,6 @@ class XCodeBackend(backends.Backend):
         self.build_targets = self.build.get_build_targets()
         self.custom_targets = self.build.get_custom_targets()
         self.generate_filemap()
-        self.generate_buildstylemap()
         self.generate_build_phase_map()
         self.generate_build_configuration_map()
         self.generate_build_configurationlist_map()
@@ -302,9 +301,6 @@ class XCodeBackend(backends.Backend):
         objects_dict.add_comment(PbxComment('Begin PBXBuildFile section'))
         self.generate_pbx_build_file(objects_dict)
         objects_dict.add_comment(PbxComment('End PBXBuildFile section'))
-        objects_dict.add_comment(PbxComment('Begin PBXBuildStyle section'))
-        self.generate_pbx_build_style(objects_dict)
-        objects_dict.add_comment(PbxComment('End PBXBuildStyle section'))
         objects_dict.add_comment(PbxComment('Begin PBXContainerItemProxy section'))
         self.generate_pbx_container_item_proxy(objects_dict)
         objects_dict.add_comment(PbxComment('End PBXContainerItemProxy section'))
@@ -371,9 +367,6 @@ class XCodeBackend(backends.Backend):
                     e = os.path.join(t.subdir, e)
                     self.filemap[e] = self.gen_id()
             self.target_filemap[name] = self.gen_id()
-
-    def generate_buildstylemap(self) -> None:
-        self.buildstylemap = {self.buildtype: self.gen_id()}
 
     def generate_build_phase_map(self) -> None:
         for tname, t in self.build_targets.items():
@@ -725,17 +718,6 @@ class XCodeBackend(backends.Backend):
             objects_dict.add_item(file_o, odict)
             odict.add_item('isa', 'PBXBuildFile')
             odict.add_item('fileRef', ref_id)
-
-    def generate_pbx_build_style(self, objects_dict):
-        # FIXME: Xcode 9 and later does not uses PBXBuildStyle and it gets removed. Maybe we can remove this part.
-        for name, idval in self.buildstylemap.items():
-            styledict = PbxDict()
-            objects_dict.add_item(idval, styledict, name)
-            styledict.add_item('isa', 'PBXBuildStyle')
-            settings_dict = PbxDict()
-            styledict.add_item('buildSettings', settings_dict)
-            settings_dict.add_item('COPY_PHASE_STRIP', 'NO')
-            styledict.add_item('name', f'"{name}"')
 
     def generate_pbx_container_item_proxy(self, objects_dict):
         for t in self.build_targets:
@@ -1185,10 +1167,6 @@ class XCodeBackend(backends.Backend):
         attr_dict.add_item('BuildIndependentTargetsInParallel', 'YES')
         project_dict.add_item('buildConfigurationList', self.project_conflist, f'Build configuration list for PBXProject "{self.build.project_name}"')
         project_dict.add_item('buildSettings', PbxDict())
-        style_arr = PbxArray()
-        project_dict.add_item('buildStyles', style_arr)
-        for name, idval in self.buildstylemap.items():
-            style_arr.add_item(idval, name)
         project_dict.add_item('compatibilityVersion', '"Xcode 11.4"')
         project_dict.add_item('hasScannedForEncodings', 0)
         project_dict.add_item('mainGroup', self.maingroup_id)
