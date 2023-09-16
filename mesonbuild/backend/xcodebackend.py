@@ -1641,6 +1641,7 @@ class XCodeBackend(backends.Backend):
             headerdirs = []
             bridging_header = ""
             is_swift = self.is_swift_target(target)
+            std_langs = {}
             for d in target.include_dirs:
                 for sd in d.incdirs:
                     cd = os.path.join(d.curdir, sd)
@@ -1741,7 +1742,7 @@ class XCodeBackend(backends.Backend):
                 # These override per-project arguments
                 gargs = self.build.global_args[target.for_machine].get(lang, [])
                 targs = target.get_extra_args(lang)
-                args = warn_args + std_args + pargs + gargs + targs
+                args = warn_args + pargs + gargs + targs
                 if lang == 'swift':
                     # For some reason putting Swift module dirs in HEADER_SEARCH_PATHS does not work,
                     # but adding -I/path to manual args does work.
@@ -1767,12 +1768,17 @@ class XCodeBackend(backends.Backend):
                     else:
                         langargs[langname] = args
                     langargs[langname] += lang_cargs
+                if std_args:
+                    # Strip "-std=" from std_args
+                    std_langs[lang] = std_args[0][5:]
             symroot = os.path.join(self.environment.get_build_dir(), target.subdir)
             bt_dict = PbxDict()
             objects_dict.add_item(valid, bt_dict, buildtype)
             bt_dict.add_item('isa', 'XCBuildConfiguration')
             settings_dict = PbxDict()
             bt_dict.add_item('buildSettings', settings_dict)
+            if 'cpp' in std_langs:
+                settings_dict.add_item('CLANG_CXX_LANGUAGE_STANDARD', '"%s"' % std_langs['cpp'])
             settings_dict.add_item('COMBINE_HIDPI_IMAGES', 'YES')
             if isinstance(target, build.SharedModule):
                 settings_dict.add_item('DYLIB_CURRENT_VERSION', '""')
@@ -1785,6 +1791,8 @@ class XCodeBackend(backends.Backend):
             if target.suffix:
                 suffix = '.' + target.suffix
                 settings_dict.add_item('EXECUTABLE_SUFFIX', suffix)
+            if 'c' in std_langs:
+                settings_dict.add_item('GCC_C_LANGUAGE_STANDARD', std_langs['c'])
             settings_dict.add_item('GCC_GENERATE_DEBUGGING_SYMBOLS', BOOL2XCODEBOOL[target.get_option(OptionKey('debug'))])
             settings_dict.add_item('GCC_INLINES_ARE_PRIVATE_EXTERN', 'NO')
             opt_flag = OPT2XCODEOPT[target.get_option(OptionKey('optimization'))]
