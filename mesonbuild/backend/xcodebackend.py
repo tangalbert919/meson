@@ -1642,6 +1642,7 @@ class XCodeBackend(backends.Backend):
             bridging_header = ""
             is_swift = self.is_swift_target(target)
             std_langs = {}
+            langs = set()
             for d in target.include_dirs:
                 for sd in d.incdirs:
                     cd = os.path.join(d.curdir, sd)
@@ -1762,6 +1763,7 @@ class XCodeBackend(backends.Backend):
                         lang = 'c'
                     elif lang == 'objcpp':
                         lang = 'cpp'
+                    langs.add(lang)
                     langname = LANGNAMEMAP[lang]
                     if langname in langargs:
                         langargs[langname] += args
@@ -1843,6 +1845,8 @@ class XCodeBackend(backends.Backend):
             settings_dict.add_item('SECTORDER_FLAGS', '""')
             if is_swift and bridging_header:
                 settings_dict.add_item('SWIFT_OBJC_BRIDGING_HEADER', f'"{bridging_header}"')
+                if self.objversion >= 60 and 'cpp' in langs:
+                    settings_dict.add_item('SWIFT_OBJC_INTEROP_MODE', 'objcxx')
             settings_dict.add_item('BUILD_DIR', f'"{symroot}"')
             settings_dict.add_item('OBJROOT', f'"{symroot}/build"')
             sysheader_arr = PbxArray()
