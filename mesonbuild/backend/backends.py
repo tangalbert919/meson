@@ -921,7 +921,12 @@ class Backend:
 
         for osrc in sources:
             objname = self.object_filename_from_source(extobj.target, osrc)
-            objpath = os.path.join(proj_dir_to_build_root, targetdir, objname)
+            # Only add target private directories when not using Xcode backend.
+            # Xcode already has its own and will use that for objects.
+            if self.name != 'xcode':
+                objpath = os.path.join(proj_dir_to_build_root, targetdir, objname)
+            else:
+                objpath = os.path.join(proj_dir_to_build_root, objname)
             result.append(objpath)
 
         return result
